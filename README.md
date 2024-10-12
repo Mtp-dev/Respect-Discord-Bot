@@ -17,7 +17,7 @@
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/your-username/MyRespectBot.git
+git clone https://github.com/mtp-dev/MyRespectBot.git
 cd MyRespectBot
 ```
 
