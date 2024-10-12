@@ -1,36 +1,39 @@
-
 import discord
 from discord import app_commands
 from discord.ext import commands
 from datetime import datetime, timedelta
 import mysql.connector
+import json
+import os
 
-# Database setup (Replace with your actual DB credentials)
-db = mysql.connector.connect(
-    host="your_mysql_host",  # Only the host IP here, no port
-    port=3306,  # Specify the port separately
-    user="your_mysql_user",
-    password="your_mysql_password",
-    database="your_mysql_database"
-)
-cursor = db.cursor()
+# Toggle between MySQL and local storage
+USE_MYSQL = False  # Set to True to use MySQL, False to use local storage
 
-# Create guilds table to track different servers using the bot
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS guilds (
-        guild_id BIGINT PRIMARY KEY,
-        respect_table_name VARCHAR(255)
+# File for local storage
+LOCAL_STORAGE_FILE = 'local_respect_data.json'
+
+# Initialize the local storage if it does not exist
+def initialize_local_storage():
+    if not os.path.exists(LOCAL_STORAGE_FILE):
+        with open(LOCAL_STORAGE_FILE, 'w') as f:
+            json.dump({}, f)
+
+if USE_MYSQL:
+    # MySQL database setup (Replace with your actual DB credentials)
+    db = mysql.connector.connect(
+        host="your_mysql_host",  # Replace with your MySQL host
+        port=3306,  # Specify the port separately
+        user="your_mysql_user",  # Replace with your MySQL user
+        password="your_mysql_password",  # Replace with your MySQL password
+        database="your_mysql_database"  # Replace with your MySQL database
     )
-''')
+    cursor = db.cursor()
 
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="/", intents=intents)
-
-# Sync the commands globally, or you can specify a specific guild for testing purposes
-guild_id = discord.Object(id=your_guild_id)  # Default guild for testing, will be dynamic with /setup
 
 class MyClient(discord.Client):
     def __init__(self):
@@ -39,46 +42,47 @@ class MyClient(discord.Client):
 
     async def on_ready(self):
         print(f'Logged in as {self.user}')
-        await self.tree.sync(guild=None)  # Sync globally for multiple servers
+        try:
+            # Sync commands globally to all servers
+            await self.tree.sync(guild=None)
+            print("Slash commands synced globally.")
+        except Exception as e:
+            print(f"Error syncing commands: {e}")
+        
+        if not USE_MYSQL:
+            initialize_local_storage()
 
 client = MyClient()
 
-# /setup command to initialize a guild with the bot
-@client.tree.command(name="setup", description="Setup the bot for your server")
-async def setup(interaction: discord.Interaction):
-    guild_id = interaction.guild.id
-    respect_table_name = f"respect_guild_{guild_id}"
+# Helper functions for local storage
+def read_local_data():
+    with open(LOCAL_STORAGE_FILE, 'r') as f:
+        return json.load(f)
 
-    # Check if the guild is already set up
-    cursor.execute("SELECT respect_table_name FROM guilds WHERE guild_id = %s", (guild_id,))
-    if cursor.fetchone() is not None:
-        await interaction.response.send_message("This server is already set up!", ephemeral=True)
-        return
+def write_local_data(data):
+    with open(LOCAL_STORAGE_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
 
-    # Create a new table for this guild's respect data
-    cursor.execute(f'''
-        CREATE TABLE IF NOT EXISTS {respect_table_name} (
-            user_id BIGINT PRIMARY KEY,
-            respect_count INT DEFAULT 0,
-            last_respect TIMESTAMP NULL
-        )
-    ''')
-
-    # Store the guild info in the guilds table
-    cursor.execute("INSERT INTO guilds (guild_id, respect_table_name) VALUES (%s, %s)", (guild_id, respect_table_name))
-    db.commit()
-
-    await interaction.response.send_message(f"Bot has been set up for this server! Respect data will be stored in `{respect_table_name}`.")
-
-# Function to get the respect table for the current guild
+# Function to get or create a respect table for the current guild
 def get_respect_table(guild_id):
-    cursor.execute("SELECT respect_table_name FROM guilds WHERE guild_id = %s", (guild_id,))
-    result = cursor.fetchone()
-    if result:
-        return result[0]
-    return None
+    if USE_MYSQL:
+        respect_table_name = f"respect_guild_{guild_id}"
+        cursor.execute(f'''
+            CREATE TABLE IF NOT EXISTS {respect_table_name} (
+                user_id BIGINT PRIMARY KEY,
+                respect_count INT DEFAULT 0,
+                last_respect TIMESTAMP NULL
+            )
+        ''')
+        return respect_table_name
+    else:
+        data = read_local_data()
+        if str(guild_id) not in data:
+            data[str(guild_id)] = {}
+            write_local_data(data)
+        return str(guild_id)
 
-# Add respect command as a slash command, works per guild
+# /respect command to give respect to another user
 @client.tree.command(name="respect", description="Give respect to another user")
 @app_commands.describe(member="The member you want to give respect to")
 async def respect(interaction: discord.Interaction, member: discord.Member):
@@ -89,42 +93,52 @@ async def respect(interaction: discord.Interaction, member: discord.Member):
     guild_id = interaction.guild.id
     respect_table = get_respect_table(guild_id)
 
-    if respect_table is None:
-        await interaction.response.send_message("This server has not been set up yet! Use `/setup` first.", ephemeral=True)
-        return
-
     user_id = member.id
-    cursor.execute(f"SELECT respect_count, last_respect FROM {respect_table} WHERE user_id = %s", (user_id,))
-    result = cursor.fetchone()
-
     current_time = datetime.utcnow()
 
-    if result:
-        respect_count, last_respect = result
+    if USE_MYSQL:
+        cursor.execute(f"SELECT respect_count, last_respect FROM {respect_table} WHERE user_id = %s", (user_id,))
+        result = cursor.fetchone()
 
-        if last_respect and current_time - last_respect < timedelta(days=1):
-            await interaction.response.send_message(f"{member.name} has already received respect in the last 24 hours. Try again later.", ephemeral=True)
-            return
-        new_count = respect_count + 1
-        cursor.execute(f"UPDATE {respect_table} SET respect_count = %s, last_respect = %s WHERE user_id = %s", (new_count, current_time, user_id))
+        if result:
+            respect_count, last_respect = result
+            if last_respect and current_time - last_respect < timedelta(days=1):
+                await interaction.response.send_message(f"{member.name} has already received respect in the last 24 hours. Try again later.", ephemeral=True)
+                return
+            new_count = respect_count + 1
+            cursor.execute(f"UPDATE {respect_table} SET respect_count = %s, last_respect = %s WHERE user_id = %s", (new_count, current_time, user_id))
+        else:
+            cursor.execute(f"INSERT INTO {respect_table} (user_id, respect_count, last_respect) VALUES (%s, %s, %s)", (user_id, 1, current_time))
+        db.commit()
+        await interaction.response.send_message(f"{member.name} has been given respect! 🪙 They now have {new_count if result else 1} respect points.")
+    
     else:
-        cursor.execute(f"INSERT INTO {respect_table} (user_id, respect_count, last_respect) VALUES (%s, %s, %s)", (user_id, 1, current_time))
+        data = read_local_data()
+        if str(user_id) in data[str(guild_id)]:
+            respect_data = data[str(guild_id)][str(user_id)]
+            last_respect = datetime.fromisoformat(respect_data["last_respect"])
+            if current_time - last_respect < timedelta(days=1):
+                await interaction.response.send_message(f"{member.name} has already received respect in the last 24 hours. Try again later.", ephemeral=True)
+                return
+            respect_data["respect_count"] += 1
+            respect_data["last_respect"] = current_time.isoformat()
+        else:
+            data[str(guild_id)][str(user_id)] = {"respect_count": 1, "last_respect": current_time.isoformat()}
+        write_local_data(data)
+        await interaction.response.send_message(f"{member.name} has been given respect! 🪙 They now have {data[str(guild_id)][str(user_id)]['respect_count']} respect points.")
 
-    db.commit()
-    await interaction.response.send_message(f"{member.name} has been given respect! 🪙 They now have {new_count if result else 1} respect points.")
-
-# Leaderboard command, works per guild
+# /leaderboard command to show top users by respect points
 @client.tree.command(name="leaderboard", description="Show top users by respect points")
 async def leaderboard(interaction: discord.Interaction):
     guild_id = interaction.guild.id
     respect_table = get_respect_table(guild_id)
 
-    if respect_table is None:
-        await interaction.response.send_message("This server has not been set up yet! Use `/setup` first.", ephemeral=True)
-        return
-
-    cursor.execute(f"SELECT user_id, respect_count FROM {respect_table} ORDER BY respect_count DESC LIMIT 10")
-    leaderboard = cursor.fetchall()
+    if USE_MYSQL:
+        cursor.execute(f"SELECT user_id, respect_count FROM {respect_table} ORDER BY respect_count DESC LIMIT 10")
+        leaderboard = cursor.fetchall()
+    else:
+        data = read_local_data()
+        leaderboard = sorted(data[str(guild_id)].items(), key=lambda x: x[1]['respect_count'], reverse=True)[:10]
 
     embed = discord.Embed(
         title="Respect Leaderboard",
@@ -133,39 +147,47 @@ async def leaderboard(interaction: discord.Interaction):
     )
 
     for rank, (user_id, respect_count) in enumerate(leaderboard, 1):
-        member = await interaction.guild.fetch_member(user_id)
-        embed.add_field(name=f"{rank}. {member.name}", value=f"{respect_count} respect points 🪙", inline=False)
+        member = await interaction.guild.fetch_member(int(user_id)) if USE_MYSQL else await interaction.guild.fetch_member(int(user_id[0]))
+        embed.add_field(name=f"{rank}. {member.name}", value=f"{respect_count[1]['respect_count'] if not USE_MYSQL else respect_count} respect points 🪙", inline=False)
 
     await interaction.response.send_message(embed=embed)
 
-# My respect command, works per guild
+# /myrespect command to show your own respect points
 @client.tree.command(name="myrespect", description="Show your respect points")
 async def myrespect(interaction: discord.Interaction):
     guild_id = interaction.guild.id
     respect_table = get_respect_table(guild_id)
-
-    if respect_table is None:
-        await interaction.response.send_message("This server has not been set up yet! Use `/setup` first.", ephemeral=True)
-        return
-
     user_id = interaction.user.id
-    cursor.execute(f"SELECT respect_count FROM {respect_table} WHERE user_id = %s", (user_id,))
-    result = cursor.fetchone()
 
-    if result:
-        embed = discord.Embed(
-            title="Your Respect Points",
-            description=f"You have {result[0]} respect points 🪙.",
-            color=discord.Color.blue()
-        )
+    if USE_MYSQL:
+        cursor.execute(f"SELECT respect_count FROM {respect_table} WHERE user_id = %s", (user_id,))
+        result = cursor.fetchone()
+
+        if result:
+            embed = discord.Embed(
+                title="Your Respect Points",
+                description=f"You have {result[0]} respect points 🪙.",
+                color=discord.Color.blue()
+            )
+        else:
+            embed = discord.Embed(
+                title="Your Respect Points",
+                description="You don't have any respect points yet.",
+                color=discord.Color.red()
+            )
+
     else:
+        data = read_local_data()
+        user_data = data[str(guild_id)].get(str(user_id), {"respect_count": 0})
+        respect_count = user_data["respect_count"]
+
         embed = discord.Embed(
             title="Your Respect Points",
-            description="You don't have any respect points yet.",
-            color=discord.Color.red()
+            description=f"You have {respect_count} respect points 🪙.",
+            color=discord.Color.blue()
         )
 
     await interaction.response.send_message(embed=embed)
 
 # Run the bot
-client.run("your_bot_token")
+client.run("your_bot_token_here")
