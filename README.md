@@ -1,4 +1,3 @@
-```md
 # Respect Discord Bot
 
 This bot allows users to give "respect" to each other and displays leaderboards for users with the most respect points. It supports multiple servers (guilds) with independent data storage for each server. You can configure the bot to store data either in **MySQL** or **locally** as a JSON file. The bot includes the following features:
@@ -95,4 +94,3 @@ Feel free to open issues or pull requests if you find any bugs or want to add ne
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
-```
