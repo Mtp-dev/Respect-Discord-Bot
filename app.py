@@ -127,7 +127,7 @@ async def respect(interaction: discord.Interaction, member: discord.Member):
         write_local_data(data)
         await interaction.response.send_message(f"{member.name} has been given respect! 🪙 They now have {data[str(guild_id)][str(user_id)]['respect_count']} respect points.")
 
-# /leaderboard command to show top users by respect points
+# /leaderboard command to show top users by respect points with error handling and better data handling
 @client.tree.command(name="leaderboard", description="Show top users by respect points")
 async def leaderboard(interaction: discord.Interaction):
     guild_id = interaction.guild.id
@@ -138,7 +138,8 @@ async def leaderboard(interaction: discord.Interaction):
         leaderboard = cursor.fetchall()
     else:
         data = read_local_data()
-        leaderboard = sorted(data[str(guild_id)].items(), key=lambda x: x[1]['respect_count'], reverse=True)[:10]
+        guild_data = data.get(str(guild_id), {})
+        leaderboard = sorted(guild_data.items(), key=lambda x: x[1]['respect_count'], reverse=True)[:10]
 
     embed = discord.Embed(
         title="Respect Leaderboard",
@@ -147,8 +148,18 @@ async def leaderboard(interaction: discord.Interaction):
     )
 
     for rank, (user_id, respect_count) in enumerate(leaderboard, 1):
-        member = await interaction.guild.fetch_member(int(user_id)) if USE_MYSQL else await interaction.guild.fetch_member(int(user_id[0]))
-        embed.add_field(name=f"{rank}. {member.name}", value=f"{respect_count[1]['respect_count'] if not USE_MYSQL else respect_count} respect points 🪙", inline=False)
+        try:
+            if USE_MYSQL:
+                member = await interaction.guild.fetch_member(int(user_id))
+                points = respect_count  # In MySQL, respect_count is directly available
+            else:
+                member = await interaction.guild.fetch_member(int(user_id))
+                points = respect_count['respect_count']  # For local storage
+
+            embed.add_field(name=f"{rank}. {member.name}", value=f"{points} respect points 🪙", inline=False)
+        except discord.NotFound:
+            # Skip users who cannot be found in the guild
+            continue
 
     await interaction.response.send_message(embed=embed)
 
