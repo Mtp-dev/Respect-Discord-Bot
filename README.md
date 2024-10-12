@@ -27,7 +27,7 @@ This bot allows users to give "respect" to each other and displays leaderboards 
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/respect-discord-bot.git
+   git clone https://github.com/mtp-dev/respect-discord-bot.git
    cd respect-discord-bot
    ```
 
