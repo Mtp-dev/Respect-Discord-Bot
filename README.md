@@ -1,7 +1,3 @@
-Here’s a simple `README.md` file for your Discord bot that explains how it works, the setup process, and usage instructions. You can adjust it according to your specific requirements before adding it to GitHub.
-
----
-
 # Respect Discord Bot
 
 This bot allows users to give "respect" to each other and displays leaderboards for users with the most respect points. It supports multiple servers (guilds) with independent data storage for each server. The bot includes the following features:
