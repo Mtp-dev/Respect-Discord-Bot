@@ -1,96 +1,107 @@
-# Respect Discord Bot
+# MyRespect Discord Bot
 
-This bot allows users to give "respect" to each other and displays leaderboards for users with the most respect points. It supports multiple servers (guilds) with independent data storage for each server. You can configure the bot to store data either in **MySQL** or **locally** as a JSON file. The bot includes the following features:
-- `/setup`: Initializes the bot for a specific server.
-- `/respect`: Gives respect to another user (with a 24-hour cooldown).
-- `/leaderboard`: Displays the top users in the server by respect points.
-- `/myrespect`: Shows how much respect the user has.
+**MyRespect** is a Discord bot that allows users to give respect to others, track their respect points, and display leaderboards of the most respected users in a server. The bot can be configured to store data in either a MySQL database or locally in a JSON file.
 
 ## Features
+- **Give Respect**: Users can give respect to other members once every 24 hours.
+- **Respect Leaderboard**: Displays the top respected users in the server.
+- **View Your Respect**: Users can view how many respect points they have received.
+- **MySQL and Local Storage Support**: Data can be stored in a MySQL database or locally, depending on your configuration.
 
-- Multi-server support: Each server (guild) can independently track respect data.
-- Dynamic respect system with leaderboards.
-- Data stored in **MySQL** or **locally**, ensuring persistence across server restarts.
-- Slash commands for easy interaction.
-
-## Prerequisites
-
-1. **Python 3.8+** installed on your system.
-2. **MySQL** server running and accessible (optional, if using MySQL).
-3. Discord bot created on the [Discord Developer Portal](https://discord.com/developers/applications).
-4. The following Python libraries installed:
-    ```bash
-    pip install discord.py mysql-connector-python
-    ```
+## Requirements
+- Python 3.10+
+- Discord.py (version 2.0+)
+- MySQL Connector (for MySQL support)
 
 ## Setup Instructions
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/mtp-dev/respect-discord-bot.git
-   cd respect-discord-bot
+### Step 1: Clone the Repository
+```bash
+git clone https://github.com/your-username/MyRespectBot.git
+cd MyRespectBot
+```
+
+### Step 2: Install Dependencies
+Use the following command to install the required dependencies from the `requirements.txt` file:
+```bash
+pip install -r requirements.txt
+```
+
+### Step 3: Configure the Bot
+You need to configure the bot by setting up either MySQL or local storage.
+
+#### Option 1: MySQL Setup
+1. In the bot's source code, set the `USE_MYSQL` flag to `True`:
+   ```python
+   USE_MYSQL = True
    ```
 
-2. **MySQL Setup (Optional)**:
-   - If you are using MySQL, ensure your MySQL database is running.
-   - Create a new database for the bot (or use an existing one) and add the credentials to the bot.
-
-   Example SQL to create a database:
-   ```sql
-   CREATE DATABASE discord_respect;
+2. Update the MySQL credentials in the following part of the code:
+   ```python
+   db = mysql.connector.connect(
+       host="your_mysql_host",
+       port=3306,
+       user="your_mysql_user",
+       password="your_mysql_password",
+       database="your_mysql_database"
+   )
    ```
 
-3. **Configure the Bot**:
-   - Open the `discord_bot.py` file.
-   - Replace the following placeholder values with your actual information:
-     - `your_mysql_host`
-     - `your_mysql_user`
-     - `your_mysql_password`
-     - `your_mysql_database`
-     - `your_bot_token`
-   - Set the `USE_MYSQL` flag to either `True` (to use MySQL) or `False` (to use local storage).
-
-4. **Run the Bot**:
-   ```bash
-   python discord_bot.py
+#### Option 2: Local Storage Setup
+1. If you prefer to store the respect data locally, set the `USE_MYSQL` flag to `False`:
+   ```python
+   USE_MYSQL = False
    ```
 
-5. **Invite the Bot** to your server:
-   - Create a bot invite link on the Discord Developer Portal by selecting the necessary permissions (like `Send Messages`, `Manage Messages`, and `Use Slash Commands`).
-   - Use the generated invite link to add the bot to your Discord server.
+2. The bot will automatically create and store data in a `local_respect_data.json` file.
+
+### Step 4: Add Your Bot Token
+Replace `"your_bot_token"` in the `client.run()` line with your actual Discord bot token:
+```python
+client.run("your_bot_token")
+```
+
+### Step 5: Run the Bot
+To start the bot, run the following command:
+```bash
+python app.py
+```
+
+The bot will sync all commands globally and be ready to use in your server.
 
 ## Commands
 
-- **/setup**: Initializes the bot for your server. This command must be run by a server admin before using other commands.
-- **/respect**: Give respect to another user. You can only give respect once every 24 hours.
-- **/leaderboard**: Displays the top users in the server by respect points.
-- **/myrespect**: Shows how many respect points you have.
+### `/respect`
+Give respect to another user in the server. You can only give respect to a user once every 24 hours.
 
-## Data Storage Options
+**Usage**:
+```bash
+/respect @user
+```
 
-You can choose to store the respect data either in MySQL or locally (using a JSON file).
+### `/leaderboard`
+Displays the top users with the most respect points in the server.
 
-### MySQL (Remote Database)
+**Usage**:
+```bash
+/leaderboard
+```
 
-- Set `USE_MYSQL = True` in the bot's configuration.
-- Provide the necessary MySQL credentials.
+### `/myrespect`
+Displays your current respect points.
 
-### Local Storage
+**Usage**:
+```bash
+/myrespect
+```
 
-- Set `USE_MYSQL = False` in the bot's configuration.
-- The data will be stored in a local JSON file (`local_respect_data.json`) in the bot's directory.
+## Storing Data
+The bot stores respect data either in a MySQL database or locally, depending on the `USE_MYSQL` flag:
+- **MySQL**: Respect data is stored in a table that is created for each guild.
+- **Local Storage**: Respect data is stored in the `local_respect_data.json` file, where each guild's data is stored separately.
 
-## Example Usage
-
-1. A server admin runs `/setup` to initialize the bot for their server.
-2. Users can give respect to others by running `/respect @username`.
-3. Users can check how much respect they have with `/myrespect`.
-4. Server members can view the top respected users by using `/leaderboard`.
-
-## Contributing
-
-Feel free to open issues or pull requests if you find any bugs or want to add new features!
+## Syncing Commands
+All commands are automatically synced globally when the bot starts. If you want to ensure all commands are available across all servers where the bot is present, simply start the bot, and the commands will sync globally.
 
 ## License
-
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+This project is licensed under the MIT License.
